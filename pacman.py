@@ -108,30 +108,42 @@ class Dot:
 # Ghost class
 class Ghost:
     def __init__(self, x, y):
-        self.x, self.y = x, y
-        self.move_counter = 0
-        self.move_delay = 20
+        self.grid_x = x
+        self.grid_y = y
+        self.pixel_x = x * TILE_SIZE
+        self.pixel_y = y * TILE_SIZE
+        self.speed = 2  # Match Pac-Man speed
+        self.direction = (0, 0)
+        self.path = []
 
     def can_move(self, x, y):
-        return maze[y][x] == '0'
+        return 0 <= x < len(maze[0]) and 0 <= y < len(maze) and maze[y][x] == '0'
 
     def update(self, pacman_pos):
-        self.move_counter += 1
-        if self.move_counter < self.move_delay:
-            return
-        self.move_counter = 0
+        # If already centered in a tile, consider changing direction
+        if self.pixel_x % TILE_SIZE == 0 and self.pixel_y % TILE_SIZE == 0:
+            self.grid_x = self.pixel_x // TILE_SIZE
+            self.grid_y = self.pixel_y // TILE_SIZE
 
-        path = self.find_path(pacman_pos)
-        if path and len(path) > 1:
-            # Move to the next step in the path
-            self.x, self.y = path[1]
+            self.path = self.find_path(pacman_pos)
+            if self.path and len(self.path) > 1:
+                next_tile = self.path[1]
+                dx = next_tile[0] - self.grid_x
+                dy = next_tile[1] - self.grid_y
+                self.direction = (dx, dy)
+            else:
+                self.direction = (0, 0)
+
+        # Move smoothly
+        self.pixel_x += self.speed * self.direction[0]
+        self.pixel_y += self.speed * self.direction[1]
 
     def find_path(self, target):
         from collections import deque
-
         queue = deque()
-        queue.append((self.x, self.y))
-        visited = { (self.x, self.y): None }
+        start = (self.grid_x, self.grid_y)
+        queue.append(start)
+        visited = {start: None}
 
         while queue:
             current = queue.popleft()
@@ -140,10 +152,9 @@ class Ghost:
 
             for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
                 nx, ny = current[0] + dx, current[1] + dy
-                if (0 <= nx < len(maze[0]) and 0 <= ny < len(maze)) and maze[ny][nx] == '0':
-                    if (nx, ny) not in visited:
-                        visited[(nx, ny)] = current
-                        queue.append((nx, ny))
+                if self.can_move(nx, ny) and (nx, ny) not in visited:
+                    visited[(nx, ny)] = current
+                    queue.append((nx, ny))
 
         # Reconstruct path
         path = []
@@ -152,10 +163,16 @@ class Ghost:
             path.insert(0, node)
             node = visited[node]
 
-        return path if path and path[0] == (self.x, self.y) else None
+        return path if path and path[0] == (self.grid_x, self.grid_y) else None
 
     def draw(self):
-        pygame.draw.circle(screen, RED, (self.x * TILE_SIZE + TILE_SIZE // 2, self.y * TILE_SIZE + TILE_SIZE // 2), TILE_SIZE // 2 - 5)
+        draw_x = max(0, min(WIDTH - TILE_SIZE, int(self.pixel_x)))
+        draw_y = max(0, min(HEIGHT - TILE_SIZE, int(self.pixel_y)))
+        pygame.draw.circle(screen, RED, (draw_x + TILE_SIZE // 2, draw_y + TILE_SIZE // 2), TILE_SIZE // 2 - 5)
+
+    @property
+    def tile_position(self):
+        return (self.grid_x, self.grid_y)
 
 # Game setup
 pacman = PacMan()
@@ -197,7 +214,7 @@ while True:
     ghost.update((pacman.grid_x, pacman.grid_y))
 
     # Collision detection with ghost
-    if (pacman.grid_x, pacman.grid_y) == (ghost.x, ghost.y):
+    if (pacman.grid_x, pacman.grid_y) == ghost.tile_position:
         print("Game Over!")
         pygame.quit()
         sys.exit()
