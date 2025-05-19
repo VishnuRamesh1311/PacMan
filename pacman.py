@@ -37,20 +37,64 @@ maze = [
 TILE_SIZE = 40
 
 # Pac-Man class
+# Updated PacMan class with smooth movement
 class PacMan:
     def __init__(self):
-        self.x, self.y = 1, 1  # grid position
-
-    def move(self, dx, dy):
-        if self.can_move(self.x + dx, self.y + dy):
-            self.x += dx
-            self.y += dy
+        self.grid_x, self.grid_y = 1, 1  # Tile/grid coordinates
+        self.x = self.grid_x * TILE_SIZE
+        self.y = self.grid_y * TILE_SIZE
+        self.speed = 2  # Pixels per frame
+        self.direction = (0, 0)
+        self.next_direction = (0, 0)
 
     def can_move(self, x, y):
-        return maze[y][x] == '0'
+        return (
+            0 <= x < len(maze[0]) and
+            0 <= y < len(maze) and
+            maze[y][x] == '0'
+        )
+
+    def update(self):
+        # Snap Pac-Man to grid when aligned
+        if self.x % TILE_SIZE == 0 and self.y % TILE_SIZE == 0:
+            self.grid_x = int(self.x // TILE_SIZE)
+            self.grid_y = int(self.y // TILE_SIZE)
+
+            # Try to apply the next direction (if allowed)
+            next_x = self.grid_x + self.next_direction[0]
+            next_y = self.grid_y + self.next_direction[1]
+            if self.can_move(next_x, next_y):
+                self.direction = self.next_direction
+
+            # Check if current direction is blocked
+            target_x = self.grid_x + self.direction[0]
+            target_y = self.grid_y + self.direction[1]
+            if not self.can_move(target_x, target_y):
+                self.direction = (0, 0)
+
+        # Move Pac-Man pixel-wise
+        self.x += self.direction[0] * self.speed
+        self.y += self.direction[1] * self.speed
+
+        # Clamp position to the screen boundaries
+        self.x = max(0, min(self.x, (len(maze[0]) - 1) * TILE_SIZE))
+        self.y = max(0, min(self.y, (len(maze) - 1) * TILE_SIZE))
 
     def draw(self):
-        pygame.draw.circle(screen, YELLOW, (self.x * TILE_SIZE + TILE_SIZE // 2, self.y * TILE_SIZE + TILE_SIZE // 2), TILE_SIZE // 2 - 5)
+        draw_x = max(0, min(WIDTH - TILE_SIZE, int(self.x)))
+        draw_y = max(0, min(HEIGHT - TILE_SIZE, int(self.y)))
+        # pygame.draw.circle(screen, YELLOW, (int(self.x + TILE_SIZE // 2), int(self.y + TILE_SIZE // 2)), TILE_SIZE // 2 - 5)
+        pygame.draw.circle(screen, YELLOW, (draw_x + TILE_SIZE // 2, draw_y + TILE_SIZE // 2), TILE_SIZE // 2 - 5)
+
+    def handle_input(self, key):
+        if key == pygame.K_LEFT:
+            self.next_direction = (-1, 0)
+        elif key == pygame.K_RIGHT:
+            self.next_direction = (1, 0)
+        elif key == pygame.K_UP:
+            self.next_direction = (0, -1)
+        elif key == pygame.K_DOWN:
+            self.next_direction = (0, 1)
 
 # Dot class
 class Dot:
@@ -123,25 +167,37 @@ while True:
     screen.fill(BLACK)
 
     # Event handling
+    # for event in pygame.event.get():
+    #     if event.type == pygame.QUIT:
+    #         pygame.quit()
+    #         sys.exit()
+    #     elif event.type == pygame.KEYDOWN:
+    #         if event.key == pygame.K_LEFT:
+    #             pacman.move(-1, 0)
+    #         elif event.key == pygame.K_RIGHT:
+    #             pacman.move(1, 0)
+    #         elif event.key == pygame.K_UP:
+    #             pacman.move(0, -1)
+    #         elif event.key == pygame.K_DOWN:
+    #             pacman.move(0, 1)
+
+    # Inside the main game loop
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
         elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                pacman.move(-1, 0)
-            elif event.key == pygame.K_RIGHT:
-                pacman.move(1, 0)
-            elif event.key == pygame.K_UP:
-                pacman.move(0, -1)
-            elif event.key == pygame.K_DOWN:
-                pacman.move(0, 1)
+            pacman.handle_input(event.key)
+
+    # Update Pac-Man and ghost
+    pacman.update()
+    # ghost.update()
 
     # Update ghost
-    ghost.update((pacman.x, pacman.y))
+    ghost.update((pacman.grid_x, pacman.grid_y))
 
     # Collision detection with ghost
-    if (pacman.x, pacman.y) == (ghost.x, ghost.y):
+    if (pacman.grid_x, pacman.grid_y) == (ghost.x, ghost.y):
         print("Game Over!")
         pygame.quit()
         sys.exit()
@@ -158,7 +214,7 @@ while True:
     dots.draw()
 
     # Remove eaten dots
-    dots.positions = [pos for pos in dots.positions if pos != (pacman.x, pacman.y)]
+    dots.positions = [pos for pos in dots.positions if pos != (pacman.grid_x, pacman.grid_y)]
 
     if not dots.positions:
         print("You Win!")
